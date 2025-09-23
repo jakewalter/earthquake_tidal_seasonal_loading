@@ -6,6 +6,7 @@ python spotl_helper.py --catalog nm_filtered_3.csv --start-date 2012-01-01 --end
 python spotl_helper.py --catalog nm_usgs_processed_longer.csv --start-date 2000-01-01 --end-date 2022-01-01 --spotl-executable /Users/jwalter/seis/spotl/bin/ertid --output strain_nm_longer.csv
 
 https://podaac.github.io/tutorials/quarto_text/DataSubscriberDownloader.html
+
 podaac-data-downloader -c TELLUS_GRAC-GRFO_MASCON_GRID_RL06.3_V4 -d ./data --start-date 2000-01-01T00:00:00Z --end-date 2022-01-01T00:00:00Z -b="-95,29,-87,37"
 
 
