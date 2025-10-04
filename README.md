@@ -1,24 +1,136 @@
 # earthquake_tidal_seasonal_loading
-Python code to calculate solid-earth stresses on faults from tidal loading and water loading
 
+Python code to calculate solid-earth tidal stresses and water loading stresses on faults, and analyze their correlation with seismicity.
 
-python spotl_helper.py --catalog nm_filtered_3.csv --start-date 2012-01-01 --end-date 2022-01-01 --spotl-executable /Users/jwalter/seis/spotl/bin/ertid --output strain_nm.csv
-python spotl_helper.py --catalog nm_usgs_processed_longer.csv --start-date 2000-01-01 --end-date 2022-01-01 --spotl-executable /Users/jwalter/seis/spotl/bin/ertid --output strain_nm_longer.csv
+## Requirements
 
-https://podaac.github.io/tutorials/quarto_text/DataSubscriberDownloader.html
+- Python 3.7+
+- Required packages: `numpy`, `pandas`, `matplotlib`, `scipy`, `xarray`
+- SPOTL (Solid-Earth Tide Program): https://igppweb.ucsd.edu/~agnew/Spotl/spotlmain.html
+- GRACE water loading data (https://podaac.github.io/tutorials/quarto_text/DataSubscriberDownloader.html and then downloaded with this: 
+podaac-data-downloader -c TELLUS_GRAC-GRFO_MASCON_GRID_RL06.3_V4 -d ./data --start-date 2000-01-01T00:00:00Z --end-date 2022-01-01T00:00:00Z -b="-95,29,-87,37")
 
-podaac-data-downloader -c TELLUS_GRAC-GRFO_MASCON_GRID_RL06.3_V4 -d ./data --start-date 2000-01-01T00:00:00Z --end-date 2022-01-01T00:00:00Z -b="-95,29,-87,37"
+Install Python dependencies:
+```bash
+pip install numpy pandas matplotlib scipy xarray
+```
 
+## Workflow
 
+### 1. Preprocess Earthquake Catalog
 
-python nm_tidal_seasonal.py --projection fault_plane --strike 173 --dip 73 --rake 90 --catalog  nm_usgs_processed_longer.csv  --spotl-output strain_nm_longer.csv --grace-file GRCTellus.JPL.200204_202506.GLO.RL06.3M.MSCNv04.nc --output-prefix reelfoot_longer --n-bootstrap 5000 --output-alpha-timeseries ceri_longer_alpha.csv
+Convert earthquake catalog to standardized format with required columns: `time`, `longitude`, `latitude`, `magnitude`, `depth`.
 
-python plot_alpha_comparison.py ceri_alpha.csv phasenet_alpha.csv 
+```bash
+python preprocess_catalog.py input_catalog.csv output_processed.csv
+```
 
-python test_coherence_enhanced.py --catalog nm_usgs_processed_longer.csv --spotl-output strain_nm_longer.csv --grace-file GRCTellus.JPL.200204_202506.GLO.RL06.3M.MSCNv04.nc --projection fault_plane --strike 173 --dip 73 --rake 90 --output-prefix reelfoot_longer
+Options:
+- `--min-mag`: Minimum magnitude filter (default: 0.0)
+- `--max-depth`: Maximum depth in km (default: 20.0)
+- `--plot`: Create a quick plot of the catalog
+- `--interactive`: Use Matplotlib interactive selector for spatial filtering
+- `--interactive-web`: Use browser-based interactive selector
 
+Example:
+```bash
+python preprocess_catalog.py nm_usgs.csv nm_usgs_processed.csv --min-mag 1.0 --max-depth 15.0
+```
 
+### 2. Calculate Tidal Strain
 
-python seasonal_nm.py --catalog nm_usgs_processed_longer.csv --completeness-mag 1.4 --mag-min 1.4 --mag-max 3.0 --use-declustered --output-prefix usgs
+Use SPOTL to calculate tidal strain at earthquake locations. You need to provide:
+- Processed earthquake catalog
+- Date range for strain calculation
+- Path to SPOTL executable (typically `ertid`)
 
-python seasonal_alpha_analysis.py --alpha-csv ceri_longer_alpha.csv --output-prefix ceri_alpha
+```bash
+python spotl_helper.py --catalog nm_usgs_processed.csv \
+    --start-date 2000-01-01 \
+    --end-date 2022-01-01 \
+    --spotl-executable /path/to/spotl/bin/ertid \
+    --output strain_output.csv
+```
+
+The script automatically:
+- Determines the centroid location from the catalog
+- Generates SPOTL input files
+- Runs the strain calculation
+- Converts output to CSV format with columns: `time`, `strain_N_nanostrain`, `strain_E_nanostrain`, `strain_NE_nanostrain`
+
+### 3. Tidal Sensitivity Analysis
+
+Analyze tidal stress modulation of seismicity, optionally including GRACE water loading.
+
+```bash
+python tidal_seasonal.py \
+    --catalog nm_usgs_processed.csv \
+    --spotl-output strain_output.csv \
+    --projection fault_plane \
+    --strike 173 \
+    --dip 73 \
+    --rake 90 \
+    --grace-file GRCTellus.JPL.200204_202506.GLO.RL06.3M.MSCNv04.nc \
+    --grace-lon-min -92 --grace-lon-max -88 \
+    --grace-lat-min 34 --grace-lat-max 38 \
+    --output-prefix results \
+    --n-bootstrap 1000 \
+    --output-alpha-timeseries alpha_timeseries.csv
+```
+
+Parameters:
+- `--projection`: `fault_plane` (requires strike/dip/rake) or `optimally_oriented`
+- `--strike`, `--dip`, `--rake`: Fault orientation in degrees
+- `--grace-file`: Optional GRACE NetCDF file for water loading analysis
+- `--grace-lon-min/max`, `--grace-lat-min/max`: Region for GRACE data averaging
+- `--n-bootstrap`: Number of bootstrap iterations for significance testing
+- `--output-alpha-timeseries`: Save time-varying phase modulation parameter
+
+Outputs:
+- Phase-amplitude plots
+- Sliding window analysis
+- Bootstrap significance tests
+- Alpha (phase modulation) vs time plots
+
+### 4. Coherence Analysis (Optional)
+
+Analyze coherence between tidal stress, GRACE water loading stress, and seismicity.
+
+```bash
+python coherence.py \
+    --catalog nm_usgs_processed.csv \
+    --spotl-output strain_output.csv \
+    --grace-file GRCTellus.JPL.200204_202506.GLO.RL06.3M.MSCNv04.nc \
+    --projection fault_plane \
+    --strike 173 --dip 73 --rake 90 \
+    --output-prefix coherence_results
+```
+
+Outputs:
+- Time series plots of tidal and GRACE stresses
+- Sliding window seismicity counts
+- Coherence spectra
+- Cross-correlation analysis
+
+## Data Files
+
+Example data files included:
+- `nm_usgs.csv`, `nm_usgs_longer.csv`: New Madrid earthquake catalogs
+- `GRCTellus.JPL.200204_202506.GLO.RL06.3M.MSCNv04.nc`: GRACE water loading data
+
+## Adapting to Other Datasets
+
+The scripts are designed to be generalizable:
+
+1. **Earthquake Catalog**: Any CSV with columns for time, location (lon/lat), magnitude, and depth
+2. **SPOTL Calculation**: Works for any geographic location; the script auto-detects catalog centroid
+3. **Fault Parameters**: Specify strike/dip/rake for your fault of interest, or use `optimally_oriented` mode
+4. **GRACE Data**: Adjust `--grace-lon/lat-min/max` to match your study region
+
+## Notes
+
+- All times should be in UTC
+- Depths should be in kilometers
+- Longitudes can be -180 to 180 or 0 to 360 (automatically handled)
+- GRACE data download instructions (not included): https://podaac.github.io/tutorials/
+- SPOTL executable must be compiled separately from source
