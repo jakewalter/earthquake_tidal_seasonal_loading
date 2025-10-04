@@ -127,6 +127,21 @@ The scripts are designed to be generalizable:
 3. **Fault Parameters**: Specify strike/dip/rake for your fault of interest, or use `optimally_oriented` mode
 4. **GRACE Data**: Adjust `--grace-lon/lat-min/max` to match your study region
 
+
+## Citations
+This code reproduces Beauce et al. (2023) and it applies it to a new region. Citing is appropriate if you use the code or results/interpretations in the following papers.
+
+Method:
+```
+Beaucé, E., Poli, P., Waldhauser, F., Holtzman, B., and Scholz, C. (2023). Enhanced tidal sensitivity of seismicity before the 2019 magnitude 7.1 Ridgecrest, California earthquake. Geophysical Research Letters, 50, e2023GL104375, https://doi.org/10.1029/2023GL104375
+```
+
+This code:
+```
+Walter, J. I., H. DeShon, and P. Neupane (in review), Solid earth tides modulate earthquake activity in the New Madrid Seismic Zone, Seismological Research 
+Letters
+```
+
 ## Notes
 
 - All times should be in UTC
