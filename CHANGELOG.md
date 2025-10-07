@@ -27,6 +27,13 @@
 - All scripts have proper argument parsing (tested with `--help`)
 - Core preprocessing script tested and working with existing data
 
+### 4. New Features (October 6, 2025)
+- **Gardner-Knopoff Declustering**: Added `--decluster` flag to `tidal_seasonal.py`
+  - Implements standard Gardner & Knopoff (1974) algorithm
+  - Removes aftershocks/foreshocks based on magnitude-dependent space-time windows
+  - Tested on sample data: reduces 1000 events to 220 mainshocks
+  - Command-line option allows easy comparison of declustered vs full catalog results
+
 ### 4. Documentation Improvements
 - Added `.gitignore` file for Python cache and output files
 - Organized data files (kept sample catalogs and GRACE data)

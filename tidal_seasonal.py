@@ -359,6 +359,151 @@ def load_catalog_for_paper(catalog_path: str) -> pd.DataFrame:
     print(f"Loaded catalog: {len(df)} events from {df['time'].min()} to {df['time'].max()}")
     return df.sort_values('time').reset_index(drop=True)
 
+def gardner_knopoff_decluster(catalog: pd.DataFrame, return_all=False) -> pd.DataFrame:
+    """
+    Apply Gardner-Knopoff declustering algorithm to earthquake catalog.
+    
+    Uses the original Gardner & Knopoff (1974) formulas for space-time windows.
+    This is an optimized implementation adapted from seasonal.py.
+    
+    Parameters:
+    -----------
+    catalog : pd.DataFrame
+        Earthquake catalog with columns: time, longitude, latitude, magnitude, depth
+    return_all : bool
+        If True, return catalog with 'is_mainshock' column.
+        If False (default), return only mainshocks
+    
+    Returns:
+    --------
+    pd.DataFrame
+        Declustered catalog or catalog with mainshock labels
+    
+    Reference:
+    ----------
+    Gardner, J.K. and Knopoff, L. (1974). Is the sequence of earthquakes in 
+    Southern California, with aftershocks removed, Poissonian? 
+    Bulletin of the Seismological Society of America, 64(5), 1363-1367.
+    """
+    # Gardner-Knopoff space-time windows as function of magnitude
+    # Standard Gardner & Knopoff (1974) formulas
+    def gk_time_window(mag):
+        """Time window in days for Gardner-Knopoff declustering"""
+        # Standard Gardner & Knopoff (1974) formula
+        # T = 10^(0.032*M + 2.7389) seconds, converted to days
+        return 10**(0.032*mag + 2.7389) / 86400
+            
+    def gk_distance_window(mag):
+        """Distance window in km for Gardner-Knopoff declustering"""
+        # Standard Gardner & Knopoff (1974) formula
+        # D = 10^(0.1238*M + 0.983) km
+        return 10**(0.1238*mag + 0.983)
+    
+    if len(catalog) == 0:
+        return catalog.copy()
+    
+    # Identify time column (could be 'time', 'datetime', or 'origintime')
+    time_col = None
+    for col in ['time', 'datetime', 'origintime']:
+        if col in catalog.columns:
+            time_col = col
+            break
+    if time_col is None:
+        raise ValueError("Catalog must have a time column (time, datetime, or origintime)")
+    
+    # Start with all events as potential mainshocks
+    data = catalog.copy().sort_values(time_col).reset_index(drop=True)
+    is_mainshock = np.ones(len(data), dtype=bool)
+    
+    print(f"Starting Gardner-Knopoff declustering of {len(data)} events...")
+    
+    # Convert to numpy arrays for faster access
+    times = pd.to_datetime(data[time_col]).values
+    mags = data['magnitude'].values
+    
+    # Pre-calculate coordinates if available
+    if 'latitude' in data.columns and 'longitude' in data.columns:
+        lats = np.radians(data['latitude'].values)
+        lons = np.radians(data['longitude'].values)
+        has_coords = True
+    else:
+        lats = lons = None
+        has_coords = False
+    
+    # Optimized Gardner-Knopoff with smart lookback limits
+    for i in range(len(data)):
+        if not is_mainshock[i]:
+            continue
+            
+        current_time = times[i]
+        current_mag = mags[i]
+        
+        # Smart lookback: only check events within reasonable time window
+        # Maximum possible time window is for largest earthquake
+        max_time_window_days = gk_time_window(max(mags))
+        
+        # Find reasonable starting point (don't go back more than max time window)
+        start_idx = 0
+        for j in range(i-1, -1, -1):
+            time_diff_days = (current_time - times[j]).astype('timedelta64[D]').astype(float)
+            if time_diff_days > max_time_window_days:
+                start_idx = j + 1
+                break
+        
+        # Check backward from current event to start_idx
+        for j in range(start_idx, i):
+            if not is_mainshock[j]:
+                continue
+                
+            earlier_mag = mags[j]
+            
+            # Only consider if earlier event is larger magnitude
+            if earlier_mag <= current_mag:
+                continue
+            
+            # Time difference in days (faster numpy operation)
+            time_diff_days = (current_time - times[j]).astype('timedelta64[D]').astype(float)
+            
+            # Determine time window based on larger (earlier) event
+            time_window = gk_time_window(earlier_mag)
+                
+            # Skip if outside time window
+            if time_diff_days > time_window:
+                continue
+                
+            # Calculate distance if coordinates available
+            if has_coords:
+                # Vectorized haversine distance calculation
+                dlat = lats[i] - lats[j]
+                dlon = lons[i] - lons[j]
+                a = np.sin(dlat/2)**2 + np.cos(lats[i]) * np.cos(lats[j]) * np.sin(dlon/2)**2
+                distance = 2 * 6371.0 * np.arcsin(np.sqrt(a))
+            else:
+                distance = 0
+            
+            # Determine distance window based on larger (earlier) event
+            distance_window = gk_distance_window(earlier_mag)
+            
+            # Mark as dependent if within space-time window of larger earlier event
+            if distance <= distance_window:
+                is_mainshock[i] = False
+                break  # Found a mainshock, this is dependent
+    
+    # Create declustered catalog
+    declustered = data[is_mainshock].copy().reset_index(drop=True)
+    
+    n_removed = len(data) - len(declustered)
+    removal_pct = (n_removed / len(data)) * 100
+    
+    print(f"Declustering removed {n_removed} events ({removal_pct:.1f}%)")
+    print(f"Declustered catalog: {len(declustered)} mainshocks")
+    
+    if return_all:
+        data['is_mainshock'] = is_mainshock
+        return data
+    else:
+        return declustered
+
 def load_spotl_strain_csv(spotl_path: str) -> pd.DataFrame:
     df = pd.read_csv(spotl_path)
     df['time'] = pd.to_datetime(df['time'])
@@ -1495,6 +1640,7 @@ if __name__ == '__main__':
     p.add_argument('--output-prefix', type=str, default='nm_tidal', help='Output prefix for plots')
     p.add_argument('--n-bootstrap', type=int, default=200, help='Bootstrap iterations')
     p.add_argument('--output-alpha-timeseries', type=str, default=None, help='CSV path to write alpha timeseries')
+    p.add_argument('--decluster', action='store_true', help='Apply Gardner-Knopoff declustering to remove aftershocks')
 
     args = p.parse_args()
 
@@ -1510,6 +1656,13 @@ if __name__ == '__main__':
 
     # Load catalog and strain
     catalog = load_catalog_for_paper(runner_args.catalog)
+    
+    # Apply declustering if requested
+    if runner_args.decluster:
+        catalog_original = catalog.copy()
+        catalog = gardner_knopoff_decluster(catalog, return_all=False)
+        print(f"After declustering: {len(catalog)} events (removed {len(catalog_original) - len(catalog)} aftershocks)")
+    
     strain_df = load_spotl_strain_csv(runner_args.spotl_output)
 
     # Build tidal interpolator

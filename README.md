@@ -85,6 +85,7 @@ Parameters:
 - `--grace-lon-min/max`, `--grace-lat-min/max`: Region for GRACE data averaging
 - `--n-bootstrap`: Number of bootstrap iterations for significance testing
 - `--output-alpha-timeseries`: Save time-varying phase modulation parameter
+- `--decluster`: Apply Gardner-Knopoff declustering to remove aftershocks/foreshocks
 
 Outputs:
 - Phase-amplitude plots
@@ -112,6 +113,23 @@ Outputs:
 - Coherence spectra
 - Cross-correlation analysis
 
+## Additional Scripts
+
+### seasonal.py
+
+An alternative implementation for seasonal analysis with built-in declustering. This script provides:
+- Class-based earthquake catalog management
+- Optimized Gardner-Knopoff declustering algorithm (source of the declustering function used in `tidal_seasonal.py`)
+- Seasonal analysis with jackknife resampling
+- Magnitude residual calculations
+- Various plotting utilities
+
+The declustering implementation in `seasonal.py` uses the standard Gardner & Knopoff (1974) formulas:
+- Time window: T = 10^(0.032*M + 2.7389) seconds
+- Distance window: D = 10^(0.1238*M + 0.983) km
+
+This is the reference implementation that has been adapted for use in `tidal_seasonal.py`.
+
 ## Data Files
 
 Example data files included:
@@ -126,6 +144,7 @@ The scripts are designed to be generalizable:
 2. **SPOTL Calculation**: Works for any geographic location; the script auto-detects catalog centroid
 3. **Fault Parameters**: Specify strike/dip/rake for your fault of interest, or use `optimally_oriented` mode
 4. **GRACE Data**: Adjust `--grace-lon/lat-min/max` to match your study region
+5. **Declustering**: Use `--decluster` flag to apply Gardner-Knopoff algorithm if your catalog includes aftershocks
 
 
 ## Citations
